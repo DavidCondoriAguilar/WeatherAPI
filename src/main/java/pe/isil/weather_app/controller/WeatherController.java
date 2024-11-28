@@ -1,32 +1,63 @@
-package pe.isil.weather_app.controller;
+package pe.isil.weather_app.service;
 
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import pe.isil.weather_app.service.WeatherService;
+import org.springframework.stereotype.Service;
+import pe.isil.weather_app.client.WeatherApiClient;
+import pe.isil.weather_app.client.model.WeatherApiResponse;
+import pe.isil.weather_app.model.WeatherData;
 
-@Controller
-public class WeatherController {
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 
-    private WeatherService service;
+@Service
+public class weatherservice {
 
-    public WeatherController(WeatherService service){
-        this.service = service;
+    private final WeatherApiClient weatherApiClient;
+
+    public weatherservice(WeatherApiClient weatherApiClient){
+        this.weatherApiClient = weatherApiClient;
     }
 
-    @GetMapping("")
-    public String index(Model model) {
+    // Obtener el clima actual para varias ciudades
+    public List<WeatherData> getCurrentWeather(){
+        var listOfCities = List.of("Lima", "Buenos Aires", "Vancouver", "Madrid");
+        var listData = new ArrayList<WeatherData>();
 
-        var serviceResult = service.getCurrentWeather();
-        model.addAttribute("weaterData", serviceResult);
-        return "index";
+        listOfCities.forEach(city -> {
+            var dataResponse = weatherApiClient.getWeather(city);
+            if(dataResponse.isEmpty()){
+                throw new RuntimeException("No se encontró información para la ciudad "+ city);
+            }
+            var data = dataResponse.get();
+            listData.add(mapTo(data));
+        });
+
+        return listData;
     }
 
-    @PostMapping("/search")
-    public String search(Model model){
-        var fromForm = model.getAttribute("city");
-        return "otro";
+    // Obtener el clima para una ciudad específica
+    public WeatherData getWeatherForCity(String city) {
+        Optional<WeatherApiResponse> dataResponse = weatherApiClient.getWeather(city);
+
+        if (dataResponse.isEmpty()) {
+            throw new RuntimeException("No se encontró información para la ciudad " + city);
+        }
+
+        return mapTo(dataResponse.get());
     }
 
+    // Método privado para mapear la respuesta de la API a un objeto WeatherData
+    private WeatherData mapTo(WeatherApiResponse data) {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+        return new WeatherData(
+                data.location().name(),
+                data.location().region(),
+                data.location().country(),
+                data.current().tempC(),
+                data.current().tempF(),
+                data.current().condition().text(),
+                LocalDateTime.parse(data.location().localtime(), formatter));
+    }
 }
